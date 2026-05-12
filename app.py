@@ -90,7 +90,7 @@ RED     = "#E24B4A"
 @st.cache_data
 def load_main():
     """Load ABS combined dataset (CPI + Wages + Retail)."""
-    df = pd.read_csv("/mnt/user-data/uploads/combined_data-2024.csv")
+    df = pd.read_csv("combined_data-2024.csv")
     df["quarter_end"] = pd.to_datetime(df["quarter_end"])
     return df
 
