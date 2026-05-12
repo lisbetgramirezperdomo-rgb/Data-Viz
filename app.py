@@ -515,10 +515,8 @@ with tab1:
             showarrow=True, arrowhead=2, arrowcolor=RED,
             font=dict(size=12, color=RED, family=_FONT), ax=45, ay=-28,
         )
-        fig1.update_layout(
-            **base_layout(270),
-            yaxis=dict(showgrid=True, gridcolor=_GRID, ticksuffix="%", tickfont=dict(size=12)),
-        )
+        fig1.update_layout(**base_layout(270))
+        fig1.update_yaxes(showgrid=True, gridcolor=_GRID, ticksuffix="%", tickfont=dict(size=12))
         st.plotly_chart(fig1, use_container_width=True)
 
     with col_b:
@@ -578,9 +576,9 @@ with tab1:
         margin=dict(t=12, b=12, l=12, r=70),
         legend=dict(orientation="h", yanchor="top", y=1.02, xanchor="left", x=0,
                     title_text="", font=dict(size=12)),
-        xaxis=dict(showgrid=True, gridcolor=_GRID),
-        yaxis=dict(tickfont=dict(size=13)),
     )
+    fig3.update_xaxes(showgrid=True, gridcolor=_GRID)
+    fig3.update_yaxes(tickfont=dict(size=13))
     st.plotly_chart(fig3, use_container_width=True)
 
     # Dynamic narrative — updates with toggle
@@ -647,9 +645,9 @@ with tab2:
             **base_layout(280, hmode="y unified"),
             barmode="group",
             margin=dict(t=12, b=12, l=12, r=50),
-            xaxis=dict(showgrid=True, gridcolor=_GRID),
-            yaxis=dict(tickfont=dict(size=13)),
         )
+        fig_ret.update_xaxes(showgrid=True, gridcolor=_GRID)
+        fig_ret.update_yaxes(tickfont=dict(size=13))
         st.plotly_chart(fig_ret, use_container_width=True)
 
     # Chart: Avg weekly earnings by state (responds to selected_states)
@@ -670,8 +668,8 @@ with tab2:
             **base_layout(280),
             margin=dict(t=12, b=12, l=12, r=90),
             showlegend=False, coloraxis_showscale=False,
-            yaxis=dict(tickfont=dict(size=13)),
         )
+        fig_earn.update_yaxes(tickfont=dict(size=13))
         st.plotly_chart(fig_earn, use_container_width=True)
 
     # Chart: Business indicators
@@ -693,11 +691,9 @@ with tab2:
             name="Gross surplus", mode="lines+markers",
             line=dict(color=GREEN, width=2.5), marker=dict(size=6),
         ))
-        fig_biz_c.update_layout(
-            **base_layout(280),
-            yaxis=dict(showgrid=True, gridcolor=_GRID, tickfont=dict(size=12)),
-            xaxis=dict(tickfont=dict(size=12)),
-        )
+        fig_biz_c.update_layout(**base_layout(280))
+        fig_biz_c.update_yaxes(showgrid=True, gridcolor=_GRID, tickfont=dict(size=12))
+        fig_biz_c.update_xaxes(tickfont=dict(size=12))
         st.plotly_chart(fig_biz_c, use_container_width=True)
 
     # ── Workforce map (responds to selected_states + salary_range + map_quarter) ──
@@ -836,11 +832,9 @@ with tab3:
             text="  Now", showarrow=False, xanchor="left",
             font=dict(size=13, family=_FONT, color=PURPLE),
         )
-        fig_proj.update_layout(
-            **base_layout(320),
-            yaxis=dict(showgrid=True, gridcolor=_GRID, tickfont=dict(size=12)),
-            xaxis=dict(tickfont=dict(size=12)),
-        )
+        fig_proj.update_layout(**base_layout(320))
+        fig_proj.update_yaxes(showgrid=True, gridcolor=_GRID, tickfont=dict(size=12))
+        fig_proj.update_xaxes(tickfont=dict(size=12))
         st.plotly_chart(fig_proj, use_container_width=True)
 
     with col_b:
@@ -863,12 +857,9 @@ with tab3:
             textposition="outside",
             textfont=dict(size=13, color="#111110", family=_FONT),
         ))
-        fig_wf.update_layout(
-            **base_layout(320, hmode="closest"),
-            showlegend=False,
-            xaxis=dict(tickfont=dict(size=13)),
-            yaxis=dict(title="AUD ($)", showgrid=True, gridcolor=_GRID),
-        )
+        fig_wf.update_layout(**base_layout(320, hmode="closest"), showlegend=False)
+        fig_wf.update_xaxes(tickfont=dict(size=13))
+        fig_wf.update_yaxes(title="AUD ($)", showgrid=True, gridcolor=_GRID)
         st.plotly_chart(fig_wf, use_container_width=True)
 
     # ── Package breakdown ──
