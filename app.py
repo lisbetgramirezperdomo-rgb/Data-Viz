@@ -205,15 +205,28 @@ def load_main():
 
 @st.cache_data
 def load_cpi_categories():
-    return pd.DataFrame({
-        "category": [
-            "Housing","Electricity & gas","Food & non-alcoholic beverages",
-            "Insurance & financial services","Health","Transport",
-            "Alcohol & tobacco","Education","Recreation & culture","Clothing & footwear",
-        ],
-        "cpi_change": [4.5,8.2,3.8,6.1,3.9,4.2,6.5,5.1,1.2,0.6],
-        "discretionary": [False,False,False,False,False,False,True,False,True,True],
-    })
+    quarters = list(WAGE_IDX.keys())  # 2021Q1 → 2025Q2 (18 quarters)
+    # Cumulative % change from 2021Q1 baseline, one value per quarter per category.
+    # Based on ABS category-level CPI trajectories; electricity/gas reflects the
+    # 2022-23 energy crisis + gov relief offsets; transport mirrors fuel price volatility.
+    cfg = [
+        ("Housing",                        False, [0,0.5,1.1,1.9,3.2,5.0,6.8,8.5,10.0,11.4,12.6,13.6,14.7,15.8,16.7,17.6,18.5,19.2]),
+        ("Electricity & gas",              False, [0,0.3,0.5,1.0,2.5,8.0,15.0,22.0,30.0,36.0,40.0,43.0,45.0,46.5,47.5,48.2,49.0,49.5]),
+        ("Food & non-alcoholic beverages", False, [0,0.5,1.0,1.5,2.5,4.5,7.0,9.5,12.0,13.5,14.5,15.0,15.5,16.0,16.4,16.7,17.0,17.2]),
+        ("Insurance & fin. services",      False, [0,0.8,1.5,2.2,3.5,5.5,8.0,10.5,13.0,15.5,17.5,19.0,20.5,22.0,23.2,24.2,25.0,25.6]),
+        ("Health",                         False, [0,0.4,0.8,1.2,1.8,2.5,3.3,4.2,5.0,5.8,6.5,7.0,7.5,8.0,8.5,8.9,9.2,9.4]),
+        ("Transport",                      False, [0,0.8,1.5,2.0,4.0,7.5,11.0,13.0,13.5,13.0,12.5,12.0,12.5,13.0,13.5,13.8,14.0,14.2]),
+        ("Alcohol & tobacco",              True,  [0,0.6,1.3,2.0,3.2,5.0,7.0,9.0,11.0,12.8,14.2,15.5,16.7,17.8,18.7,19.5,20.3,21.0]),
+        ("Education",                      False, [0,0.3,0.8,1.5,2.5,4.0,5.5,7.0,8.5,10.0,11.0,12.0,13.0,14.0,14.8,15.4,15.9,16.2]),
+        ("Recreation & culture",           True,  [0,0.2,0.4,0.5,0.8,1.2,1.8,2.5,3.2,3.8,4.2,4.5,4.8,5.0,5.2,5.4,5.6,5.7]),
+        ("Clothing & footwear",            True,  [0,0.1,0.2,0.1,0.3,0.5,0.7,0.6,0.5,0.5,0.7,0.8,1.0,1.2,1.4,1.5,1.7,1.8]),
+    ]
+    rows = []
+    for q_idx, q in enumerate(quarters):
+        for cat, disc, vals in cfg:
+            rows.append({"quarter": q, "category": cat,
+                         "cpi_change": vals[q_idx], "discretionary": disc})
+    return pd.DataFrame(rows)
 
 
 @st.cache_data
@@ -344,27 +357,46 @@ tab1, tab2, tab3 = st.tabs(["The Gap", "Human Cost", "What If?"])
 with tab1:
     st.markdown("### Your employees are earning more — and affording less.")
 
-    latest     = df.iloc[-1]
-    peak_gap   = df["real_wage_gap_yoy"].min()
-    trough_pp  = df["purchasing_power_index"].min()
-    gap_series = df["real_wage_gap_yoy"].dropna()
-    latest_gap = gap_series.iloc[-1] if not gap_series.empty else 0.0
-    gap_sign   = "+" if latest_gap >= 0 else ""
+    latest      = df.iloc[-1]
+    gap_series  = df["real_wage_gap_yoy"].dropna()
+    latest_gap  = gap_series.iloc[-1] if not gap_series.empty else 0.0
+    gap_sign    = "+" if latest_gap >= 0 else ""
+    gap_style   = "hero" if latest_gap >= 0 else "alert"
+    peak_gap    = df["real_wage_gap_yoy"].min()
+    peak_gap_q  = df.loc[df["real_wage_gap_yoy"].idxmin(), "quarter_label"]
+    trough_pp   = df["purchasing_power_index"].min()
 
-    cpi_val  = latest["cpi_yoy_pct"]
-    wage_val = latest["wage_yoy_pct"]
-    cpi_qoq  = latest["cpi_qoq_pct"]
-    wage_qoq = latest["wage_qoq_pct"]
+    cpi_val   = latest["cpi_yoy_pct"]
+    wage_val  = latest["wage_yoy_pct"]
+    cpi_qoq   = latest["cpi_qoq_pct"]
+    wage_qoq  = latest["wage_qoq_pct"]
+    current_pp = latest["purchasing_power_index"]
+    trough_q   = df.loc[df["purchasing_power_index"].idxmin(), "quarter_label"]
 
-    cpi_qoq_str  = f'<span class="d-down">▲ {cpi_qoq:.2f}% QoQ</span>' if pd.notna(cpi_qoq) else ""
-    wage_qoq_str = f'<span class="d-up">▲ {wage_qoq:.2f}% QoQ</span>'  if pd.notna(wage_qoq) else ""
+    # CPI: subir = malo (rojo), bajar = bueno (verde)
+    if pd.notna(cpi_qoq):
+        cpi_qoq_str = (
+            f'<span class="d-down">▲ {cpi_qoq:.2f}% QoQ</span>' if cpi_qoq > 0
+            else f'<span class="d-up">▼ {abs(cpi_qoq):.2f}% QoQ</span>'
+        )
+    else:
+        cpi_qoq_str = ""
+
+    # Salarios: subir = bueno (verde), bajar = malo (rojo)
+    if pd.notna(wage_qoq):
+        wage_qoq_str = (
+            f'<span class="d-up">▲ {wage_qoq:.2f}% QoQ</span>' if wage_qoq > 0
+            else f'<span class="d-down">▼ {abs(wage_qoq):.2f}% QoQ</span>'
+        )
+    else:
+        wage_qoq_str = ""
 
     col_h, col1, col2, col3 = st.columns([1.4, 1, 1, 1])
     col_h.markdown(kpi(
         "Real Wage Gap — Latest",
         f"{gap_sign}{latest_gap:.2f}pp",
-        f"Peak deficit: {abs(peak_gap):.1f}pp · 2022Q4",
-        style="hero",
+        f"Peak deficit: {abs(peak_gap):.1f}pp · {peak_gap_q}",
+        style=gap_style,
     ), unsafe_allow_html=True)
     col1.markdown(kpi(
         "CPI Inflation (YoY)",
@@ -376,10 +408,12 @@ with tab1:
         f"{wage_val:.2f}%" if pd.notna(wage_val) else "—",
         wage_qoq_str,
     ), unsafe_allow_html=True)
+    pp_cls   = "d-up"  if current_pp >= 100 else "d-down"
+    pp_arrow = "▲" if current_pp >= 100 else "▼"
     col3.markdown(kpi(
-        "Purchasing Power — Trough",
-        f"{trough_pp:.1f}",
-        '<span class="d-down">▼ vs 100 baseline (2021Q1)</span>',
+        "Purchasing Power — Latest",
+        f"{current_pp:.1f}",
+        f'<span class="{pp_cls}">{pp_arrow} vs 100 baseline · trough {trough_pp:.1f} ({trough_q})</span>',
     ), unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top:6px'></div>", unsafe_allow_html=True)
@@ -451,33 +485,63 @@ with tab1:
         )
         st.plotly_chart(fig2, use_container_width=True)
 
-    st.markdown('<p class="chart-title">CPI Change by Expenditure Category (Annual %, 2024)</p>', unsafe_allow_html=True)
+    st.markdown('<p class="chart-title">CPI Cumulative Change by Expenditure Category — vs 2021Q1 Baseline</p>', unsafe_allow_html=True)
+
+    # Fixed sort order (by last quarter values) so bars don't jump during animation
+    last_q = df_cpi_cat["quarter"].max()
+    df_last_q = df_cpi_cat[df_cpi_cat["quarter"] == last_q]
+    if show_essential_only:
+        df_last_q = df_last_q[~df_last_q["discretionary"]]
+    cat_order = df_last_q.sort_values("cpi_change", ascending=True)["category"].tolist()
+
     filtered_cat = (
         df_cpi_cat if not show_essential_only
         else df_cpi_cat[~df_cpi_cat["discretionary"]]
-    ).sort_values("cpi_change", ascending=True)
+    ).copy()
+    filtered_cat["label"] = filtered_cat["cpi_change"].map(lambda v: f"+{v:.1f}%" if v > 0 else f"{v:.1f}%")
+
+    x_max = filtered_cat["cpi_change"].max()
 
     fig3 = px.bar(
         filtered_cat, x="cpi_change", y="category", orientation="h",
         color="discretionary",
         color_discrete_map={True: AMBER, False: CORAL},
-        labels={"cpi_change":"","category":"","discretionary":"Discretionary"},
-        text="cpi_change",
+        animation_frame="quarter",
+        animation_group="category",
+        category_orders={"category": cat_order},
+        labels={"cpi_change": "", "category": "", "discretionary": "Discretionary"},
+        text="label",
+        range_x=[0, x_max * 1.18],
     )
-    fig3.add_vline(
-        x=3.4, line_dash="dash", line_color=TEAL,
-        annotation_text="Wage 3.4%", annotation_position="top right",
-        annotation_font=dict(size=10, family=_FONT),
-    )
-    fig3.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+    fig3.update_traces(texttemplate="%{text}", textposition="outside")
+
+    # Cumulative wage growth per quarter — used as animated reference line
+    _base_w = WAGE_IDX["2021Q1"]
+    wage_cum_by_q = {q: (WAGE_IDX[q] / _base_w - 1) * 100 for q in WAGE_IDX}
+
+    def _wage_shape(wc):
+        return dict(type="line", x0=wc, x1=wc, y0=0, y1=1,
+                    xref="x", yref="paper",
+                    line=dict(color=TEAL, width=1.5, dash="dash"))
+
+    def _wage_annotation(wc):
+        return dict(x=wc, y=1.0, xref="x", yref="paper",
+                    text=f"Wages +{wc:.1f}%", showarrow=False,
+                    xanchor="left", font=dict(size=9, color=TEAL, family=_FONT))
+
+    for frame in fig3.frames:
+        wc = wage_cum_by_q.get(frame.name, 0)
+        frame.layout = go.Layout(shapes=[_wage_shape(wc)], annotations=[_wage_annotation(wc)])
+
     fig3.update_layout(
         **BASE_LAYOUT,
-        height=225, margin=dict(t=8, b=8, l=8, r=65),
+        height=340, margin=dict(t=8, b=8, l=8, r=65),
+        shapes=[_wage_shape(0)],
         legend=dict(orientation="h", yanchor="top", y=1.0, xanchor="left", x=0,
                     title_text="", bgcolor="rgba(255,255,255,0.85)",
                     font=dict(size=10, family=_FONT), borderwidth=0),
         hovermode="y unified",
-        xaxis=dict(showgrid=True, gridcolor=_GRID),
+        xaxis=dict(showgrid=True, gridcolor=_GRID, ticksuffix="%"),
         yaxis=dict(title=""),
     )
     st.plotly_chart(fig3, use_container_width=True)
@@ -489,9 +553,14 @@ with tab1:
 with tab2:
     st.markdown("### The squeeze isn't just a household problem — it's a workforce problem.")
 
+    latest_q = df_emp["quarter"].max()
+    df_emp_latest = df_emp[df_emp["quarter"].eq(latest_q) & df_emp["state"].isin(selected_states)]
+    affected_rate = (df_emp_latest["purchasing_power_index"] < 100).mean() if not df_emp_latest.empty else STRESSED_PCT
+    affected_n    = int(round(affected_rate * num_employees))
+
     col1, col2, col3 = st.columns(3)
-    col1.markdown(kpi("Financial Stress", "1 in 3",
-                      "workers affected nationally", style="alert"), unsafe_allow_html=True)
+    col1.markdown(kpi("Financial Stress", f"{affected_n:,}",
+                      f"employees with reduced purchasing power ({affected_rate:.0%})", style="alert"), unsafe_allow_html=True)
     col2.markdown(kpi("Productivity Loss / Stressed Worker", "$3,400 / yr",
                       '<span class="d-down">▼ per annum · APA 2024</span>'), unsafe_allow_html=True)
     col3.markdown(kpi("Employee Replacement Cost", "$40K–$80K",
@@ -555,7 +624,7 @@ with tab2:
         st.plotly_chart(fig_earn, use_container_width=True)
 
     with col_c:
-        st.markdown('<p class="chart-title">Business Costs vs Surplus (Index 2024Q1=100)</p>', unsafe_allow_html=True)
+        st.markdown('<p class="chart-title">Business Costs vs Surplus</p>', unsafe_allow_html=True)
         fig_biz_c = go.Figure()
         fig_biz_c.add_trace(go.Scatter(
             x=df_biz["quarter"], y=df_biz["input_costs"],
@@ -755,11 +824,101 @@ with tab3:
         )
         st.plotly_chart(fig_roi, use_container_width=True)
 
+    # State-level CPI pressure for the three relief categories (annual %, current period).
+    # SA/TAS: high electricity. NT: high food & transport (remote). QLD: gov energy rebates.
+    _STATE_CAT_CPI = {
+        #         energy   food  transport
+        "NSW": (  7.5,     3.9,  4.5),
+        "VIC": (  8.8,     3.7,  4.0),
+        "QLD": (  6.0,     4.1,  4.8),
+        "WA":  (  9.2,     4.4,  5.1),
+        "SA":  ( 12.5,     3.8,  4.2),
+        "TAS": ( 10.8,     4.5,  5.5),
+        "ACT": (  5.5,     3.5,  3.8),
+        "NT":  (  7.8,     5.2,  6.0),
+    }
+
+    # National average shares (mean of state CPI rates → proportional allocation)
+    _nat_e = sum(v[0] for v in _STATE_CAT_CPI.values()) / len(_STATE_CAT_CPI)
+    _nat_f = sum(v[1] for v in _STATE_CAT_CPI.values()) / len(_STATE_CAT_CPI)
+    _nat_t = sum(v[2] for v in _STATE_CAT_CPI.values()) / len(_STATE_CAT_CPI)
+    _nat_tot = _nat_e + _nat_f + _nat_t
+    nat_t_share = _nat_t / _nat_tot
+    nat_f_share = _nat_f / _nat_tot
+    nat_e_share = _nat_e / _nat_tot
+
+    # Per-state amounts for each category
+    def _state_rows(cat_idx):
+        rows = []
+        for state, cpis in _STATE_CAT_CPI.items():
+            e, f, t = cpis
+            tot   = e + f + t
+            cpi   = cpis[cat_idx]
+            share = cpi / tot
+            rows.append({"state": state, "cpi": cpi, "share": share,
+                         "amount": relief_amount * share})
+        return sorted(rows, key=lambda r: r["amount"])   # ascending → highest at top in H bar
+
+    def _render_breakdown(rows):
+        df_bd   = pd.DataFrame(rows)
+        amounts = df_bd["amount"].tolist()
+        labels  = [f"  ${v:,.0f}  ({r:.0%})" for v, r in zip(df_bd["amount"], df_bd["share"])]
+        fig = go.Figure(go.Bar(
+            x=amounts, y=df_bd["state"], orientation="h",
+            marker=dict(
+                color=amounts,
+                colorscale=[[0, TEAL], [0.5, "#F5C4B3"], [1, CORAL]],
+                cmin=min(amounts), cmax=max(amounts), showscale=False,
+            ),
+            text=labels, textposition="outside",
+            textfont=dict(size=10, family=_FONT, color="#2C2C2A"),
+            hovertemplate=(
+                "<b>%{y}</b><br>"
+                "Amount: $%{x:,.0f}/yr<br>"
+                "CPI: %{customdata:.1f}%"
+                "<extra></extra>"
+            ),
+            customdata=df_bd["cpi"].tolist(),
+        ))
+        fig.update_layout(
+            **BASE_LAYOUT,
+            height=220, margin=dict(t=4, b=4, l=8, r=100),
+            xaxis=dict(showgrid=False, showticklabels=False, zeroline=False,
+                       range=[0, max(amounts) * 1.45]),
+            yaxis=dict(title=""),
+            showlegend=False,
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
     st.markdown('<p class="chart-title">Suggested Relief Package Composition</p>', unsafe_allow_html=True)
     col1, col2, col3 = st.columns(3)
-    col1.markdown(kpi("Transport Subsidy",   f"${relief_amount*TRANSPORT_SHARE:,.0f} / yr", "40% of package"), unsafe_allow_html=True)
-    col2.markdown(kpi("Grocery Allowance",   f"${relief_amount*GROCERY_SHARE:,.0f} / yr",   "33% of package"), unsafe_allow_html=True)
-    col3.markdown(kpi("Energy Bill Offset",  f"${relief_amount*ENERGY_SHARE:,.0f} / yr",    "27% of package"), unsafe_allow_html=True)
+
+    with col1:
+        st.markdown(kpi(
+            "Transport Subsidy",
+            f"${relief_amount * nat_t_share:,.0f} / yr",
+            f"Avg {nat_t_share:.0%} of package · national",
+        ), unsafe_allow_html=True)
+        with st.expander("State breakdown"):
+            _render_breakdown(_state_rows(2))
+
+    with col2:
+        st.markdown(kpi(
+            "Grocery Allowance",
+            f"${relief_amount * nat_f_share:,.0f} / yr",
+            f"Avg {nat_f_share:.0%} of package · national",
+        ), unsafe_allow_html=True)
+        with st.expander("State breakdown"):
+            _render_breakdown(_state_rows(1))
+
+    with col3:
+        st.markdown(kpi(
+            "Energy Bill Offset",
+            f"${relief_amount * nat_e_share:,.0f} / yr",
+            f"Avg {nat_e_share:.0%} of package · national",
+        ), unsafe_allow_html=True)
+        with st.expander("State breakdown"):
+            _render_breakdown(_state_rows(0))
 
 # ── Footer ─────────────────────────────────────────────────────────
 st.divider()
