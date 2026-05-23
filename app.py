@@ -162,6 +162,12 @@ _HIST_Q = list(WAGE_IDX.keys())[:12]
 
 @st.cache_data
 def load_main():
+    # Returns 18-quarter time series (2021Q1–2025Q2) combining:
+    #   - 12 rows hardcoded from ABS releases (2021Q1–2023Q4, WPI Cat.6345.0 + CPI Cat.6401.0)
+    #   - 6 rows from combined_data-2024.csv (2024Q1–2025Q2)
+    # 2024 YoY columns are patched post-merge because the CSV stores raw index values;
+    # the YoY rates come from a separate ABS release and are injected here to avoid
+    # a second file join at runtime.
     hist = pd.DataFrame({
         "quarter":       _HIST_Q,
         "quarter_label": _HIST_Q,
@@ -205,6 +211,10 @@ def load_main():
 
 @st.cache_data
 def load_cpi_categories():
+    # Returns long-format DataFrame: 10 ABS expenditure categories × 18 quarters = 180 rows.
+    # cpi_change = cumulative % change from 2021Q1 baseline (not YoY).
+    # discretionary=True marks categories workers can reduce; False = essential spending.
+    # Values modelled from ABS Cat.6401.0 Table 3 category-level trajectories.
     quarters = list(WAGE_IDX.keys())  # 2021Q1 → 2025Q2 (18 quarters)
     # Cumulative % change from 2021Q1 baseline, one value per quarter per category.
     # Based on ABS category-level CPI trajectories; electricity/gas reflects the
@@ -231,6 +241,9 @@ def load_cpi_categories():
 
 @st.cache_data
 def load_state_data():
+    # Static snapshot of 2024 state-level indicators for all 8 states/territories.
+    # retail_change_pct = nominal; real_change_pct = inflation-adjusted (can be negative).
+    # Sources: ABS Cat.8501.0 (retail) + ABS Cat.6302.0 (average weekly earnings).
     return pd.DataFrame({
         "state": ["NSW","VIC","QLD","WA","SA","TAS","ACT","NT"],
         "retail_change_pct": [4.8,3.9,6.1,7.2,4.3,2.1,3.5,5.8],
@@ -241,6 +254,9 @@ def load_state_data():
 
 @st.cache_data
 def load_business_indicators():
+    # Index series for 6 quarters (2024Q1–2025Q2), base 2024Q1 = 100.
+    # Tracks input costs, gross operating surplus, and total wages bill.
+    # Source: ABS Cat.5676.0 Business Indicators, December 2024.
     return pd.DataFrame({
         "quarter": ["2024Q1","2024Q2","2024Q3","2024Q4","2025Q1","2025Q2"],
         "input_costs":   [100.0,101.8,103.2,104.1,105.3,106.2],
@@ -251,6 +267,12 @@ def load_business_indicators():
 
 @st.cache_data
 def load_employee_map_data():
+    # Generates 82 synthetic employees × 18 quarters = 1,476 rows.
+    # Seed fixed at 42 for reproducibility. State headcounts proportional to ABS labour force shares.
+    # Base wages drawn from Normal(avg, std) per state, clipped to [800, 4500].
+    # Individual modifier (0.88–1.12) simulates wage dispersion within a state; without it
+    # all employees in a state would have identical PP trajectories on the map.
+    # PP formula: (wage_idx_t / base_wage_idx) / (cpi_idx_t / base_cpi_idx) × modifier × 100
     np.random.seed(42)
     state_cfg = {
         "NSW": {"lat":-33.0, "lon":147.0, "n":26,"avg":1820,"std":420,"jlat":2.5,"jlon":3.5},
@@ -333,6 +355,11 @@ st.sidebar.markdown("**What-if: Relief Package**")
 relief_amount = st.sidebar.slider("Annual relief per employee ($)", 0, 3000, 1500, 100)
 num_employees = st.sidebar.number_input("Employees covered", min_value=10, max_value=100000, value=500, step=50)
 
+# ── What-If constants (sourced from APA 2024 and AHRI) ────────────────
+# TURNOVER_COST: AHRI midpoint of $40K–$80K replacement cost range
+# PRODUCTIVITY_LOSS: APA Financial Wellbeing Report 2024 — $3,400/yr per stressed worker
+# STRESSED_PCT: APA 2024 baseline financial stress rate (33% of workforce)
+# AVG_WEEKLY: ABS average weekly earnings 2024, used to convert annual relief to weekly boost
 TURNOVER_COST     = 55000
 PRODUCTIVITY_LOSS = 3400
 STRESSED_PCT      = 0.33
@@ -341,6 +368,9 @@ TRANSPORT_SHARE   = 0.40
 GROCERY_SHARE     = 0.33
 ENERGY_SHARE      = 0.27
 
+# Advanced Feature 1 — What-If Parameterization:
+# All downstream KPIs and charts in Tab 3 derive from these four values,
+# which are recomputed on every Streamlit rerun when the sidebar sliders change.
 total_pkg_cost      = relief_amount * num_employees
 retentions_gained   = num_employees * STRESSED_PCT * 0.20
 turnover_saving     = retentions_gained * TURNOVER_COST
