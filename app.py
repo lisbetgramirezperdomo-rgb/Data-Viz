@@ -398,6 +398,31 @@ with tab1:
         f"Peak deficit: {abs(peak_gap):.1f}pp · {peak_gap_q}",
         style=gap_style,
     ), unsafe_allow_html=True)
+    # Sparkline shows the full wage-gap trajectory beneath the hero KPI (P2.3)
+    _sp_df    = df.dropna(subset=["real_wage_gap_yoy"])
+    _sp_qs    = _sp_df["quarter_label"].tolist()
+    _sp_vs    = _sp_df["real_wage_gap_yoy"].tolist()
+    _sp_color = CORAL if latest_gap < 0 else TEAL
+    _sp = go.Figure()
+    _sp.add_trace(go.Scatter(
+        x=_sp_qs, y=_sp_vs, mode="lines",
+        line=dict(color=_sp_color, width=1.5), showlegend=False,
+        hovertemplate="%{x}: %{y:+.2f}pp<extra></extra>",
+    ))
+    _sp.add_trace(go.Scatter(
+        x=[_sp_qs[-1]], y=[_sp_vs[-1]],
+        mode="markers", marker=dict(color=_sp_color, size=6),
+        showlegend=False, hoverinfo="skip",
+    ))
+    _sp.add_hline(y=0, line_color=GRAY, line_width=0.8, line_dash="dot")
+    _sp.update_layout(
+        plot_bgcolor="white", paper_bgcolor="white",
+        margin=dict(t=2, b=2, l=4, r=4), height=68,
+        xaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
+        yaxis=dict(showticklabels=False, showgrid=False, zeroline=False),
+        hovermode="x unified",
+    )
+    col_h.plotly_chart(_sp, use_container_width=True, config={"displayModeBar": False})
     col1.markdown(kpi(
         "CPI Inflation (YoY)",
         f"{cpi_val:.1f}%" if pd.notna(cpi_val) else "—",
@@ -417,6 +442,18 @@ with tab1:
     ), unsafe_allow_html=True)
 
     st.markdown("<div style='margin-top:6px'></div>", unsafe_allow_html=True)
+    # Scrollytelling callout — guides the user into the animated chart below
+    _ess_note = " Toggle <b>Essential categories only</b> in the sidebar to isolate unavoidable pressures." if not show_essential_only else " You are viewing <b>essential categories only</b> — housing, energy, food, and transport."
+    st.markdown(
+        f'<div style="background:#f0f8f5;border-left:3px solid {TEAL};'
+        f'padding:8px 12px;border-radius:4px;margin:0 0 8px 0;'
+        f'font-size:12px;color:#444;font-family:Inter,sans-serif;">'
+        f'<b>How to read this:</b> Use the animated chart below to trace the crisis quarter by quarter. '
+        f'The dashed teal line marks cumulative wage growth — any bar extending past it represents a category '
+        f'where costs outpaced pay.{_ess_note}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
     col_a, col_b = st.columns(2)
 
@@ -448,7 +485,7 @@ with tab1:
                         borderwidth=0),
             height=245, hovermode="x unified",
         )
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(fig1, use_container_width=True, config={"displayModeBar": False})
 
     with col_b:
         st.markdown('<p class="chart-title">Purchasing Power Index (base = 2021Q1 = 100)</p>', unsafe_allow_html=True)
@@ -483,7 +520,7 @@ with tab1:
             yaxis=dict(title="", showgrid=True, gridcolor=_GRID),
             height=245, hovermode="x unified",
         )
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
 
     st.markdown('<p class="chart-title">CPI Cumulative Change by Expenditure Category — vs 2021Q1 Baseline</p>', unsafe_allow_html=True)
 
@@ -569,6 +606,25 @@ with tab2:
     st.markdown("<div style='margin-top:6px'></div>", unsafe_allow_html=True)
 
     df_sf = df_states[df_states["state"].isin(selected_states)].copy()
+
+    # Context-aware callout: updates every time state filter or employee count changes
+    _sel_label  = (", ".join(selected_states) if len(selected_states) <= 4
+                   else f"{len(selected_states)} states/territories")
+    _worst_st   = (df_sf.loc[df_sf["real_change_pct"].idxmin(), "state"]
+                   if not df_sf.empty else "—")
+    st.markdown(
+        f'<div style="background:#fff8f5;border-left:3px solid {CORAL};'
+        f'padding:8px 12px;border-radius:4px;margin:0 0 8px 0;'
+        f'font-size:12px;color:#444;font-family:Inter,sans-serif;">'
+        f'Across <b>{_sel_label}</b>: an estimated <b>{affected_n:,}</b> of your '
+        f'<b>{num_employees:,}</b> covered employees ({affected_rate:.0%}) '
+        f'have lost real purchasing power in the latest quarter. '
+        f'Real retail spending is most pressured in <b>{_worst_st}</b>. '
+        f'Change the <b>States / Territories</b> or <b>Salary Band</b> filters in the sidebar '
+        f'to explore specific workforce cohorts.'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
     col_a, col_b, col_c = st.columns(3)
 
@@ -716,7 +772,8 @@ with tab2:
                 title_font=dict(size=10, family=_FONT),
             ),
         )
-        st.plotly_chart(fig_map, use_container_width=True)
+        with st.spinner("Rendering workforce map…"):
+            st.plotly_chart(fig_map, use_container_width=True)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -823,6 +880,69 @@ with tab3:
             height=300, showlegend=False,
         )
         st.plotly_chart(fig_roi, use_container_width=True)
+
+    # P3.2 — Real wage gap: historical trajectory + projected recovery with/without relief.
+    # The relief_amount slider drives _relief_boost, so this chart reacts to the sidebar.
+    st.markdown(
+        '<p class="chart-title">Real Wage Gap — Historical Trend &amp; Projected Recovery With Relief</p>',
+        unsafe_allow_html=True,
+    )
+    _gh_df   = df.dropna(subset=["real_wage_gap_yoy"])
+    _gh_qs   = _gh_df["quarter_label"].tolist()
+    _gh_vs   = _gh_df["real_wage_gap_yoy"].tolist()
+    _base_gv = _gh_vs[-1]
+    _proj_qs = ["2025Q3", "2025Q4", "2026Q1", "2026Q2"]
+    # No-relief: gap improves slowly at the current rate (wage > CPI by ~1.2pp)
+    _no_rel  = [round(_base_gv + 0.12 * (i + 1), 2) for i in range(4)]
+    # With-relief: relief_weekly / avg_weekly boosts effective take-home above CPI each quarter
+    _rel_boost_pp = (relief_amount / 52) / AVG_WEEKLY * 100
+    _with_rel = [round(_base_gv + (0.12 + _rel_boost_pp / 4) * (i + 1), 2) for i in range(4)]
+
+    fig_gap_rec = go.Figure()
+    fig_gap_rec.add_trace(go.Scatter(
+        x=_gh_qs, y=_gh_vs, name="Historical gap", mode="lines+markers",
+        line=dict(color=GRAY, width=2),
+        marker=dict(size=4, color=[CORAL if v < 0 else TEAL for v in _gh_vs]),
+        hovertemplate="%{x}: %{y:+.2f}pp<extra></extra>",
+    ))
+    fig_gap_rec.add_trace(go.Scatter(
+        x=[_gh_qs[-1]] + _proj_qs, y=[_base_gv] + _no_rel,
+        name="No relief", mode="lines",
+        line=dict(color=CORAL, width=2, dash="dot"),
+        hovertemplate="%{x}: %{y:+.2f}pp<extra></extra>",
+    ))
+    fig_gap_rec.add_trace(go.Scatter(
+        x=[_gh_qs[-1]] + _proj_qs, y=[_base_gv] + _with_rel,
+        name="With relief", mode="lines",
+        line=dict(color=TEAL, width=2.5),
+        fill="tonexty", fillcolor="rgba(29,158,117,0.08)",
+        hovertemplate="%{x}: %{y:+.2f}pp<extra></extra>",
+    ))
+    fig_gap_rec.add_hline(
+        y=0, line_color=GRAY, line_width=0.8, line_dash="dot",
+        annotation_text="Wages = CPI", annotation_position="top left",
+        annotation_font=dict(size=9, family=_FONT),
+    )
+    fig_gap_rec.add_shape(
+        type="line",
+        x0=_gh_qs[-1], x1=_gh_qs[-1], y0=0, y1=1, xref="x", yref="paper",
+        line=dict(color=PURPLE, width=1.2, dash="dash"),
+    )
+    fig_gap_rec.add_annotation(
+        x=_gh_qs[-1], y=1, yref="paper", text="Now",
+        showarrow=False, xanchor="left",
+        font=dict(size=10, family=_FONT, color=PURPLE),
+    )
+    fig_gap_rec.update_layout(
+        **BASE_LAYOUT, margin=_M,
+        yaxis=dict(title="Real wage gap (pp)", showgrid=True, gridcolor=_GRID,
+                   ticksuffix="pp", zeroline=False),
+        legend=dict(orientation="h", yanchor="top", y=1.0, xanchor="left", x=0,
+                    bgcolor="rgba(255,255,255,0.85)", font=dict(size=10, family=_FONT),
+                    borderwidth=0),
+        height=240, hovermode="x unified",
+    )
+    st.plotly_chart(fig_gap_rec, use_container_width=True, config={"displayModeBar": False})
 
     # State-level CPI pressure for the three relief categories (annual %, current period).
     # SA/TAS: high electricity. NT: high food & transport (remote). QLD: gov energy rebates.
