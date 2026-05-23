@@ -151,7 +151,7 @@ Key non-obvious implementation decisions are annotated inline in `app.py`:
 
 | Role | Detail |
 |---|---|
-| **Author** | Maria Rodriguez Alliende |
+| **Author** |Maria Rodriguez Alliende, Geraldine Ramírez, Xiaofei Jia, Akhil Chauhuab, Mukesh Murugesan, The Vinh Bui, Turki Al Hajri|
 | **Course** | DVN — Data Visualisation · UTS Master of Data Science and Innovation |
 | **Dashboard framework** | [Streamlit](https://streamlit.io) |
 | **Charting library** | [Plotly](https://plotly.com/python/) |
